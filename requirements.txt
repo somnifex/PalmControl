@@ -1,0 +1,7 @@
+opencv-python
+mediapipe
+pyautogui
+customtkinter
+pystray
+# For Windows autostart
+pywin32; sys_platform == 'win32'

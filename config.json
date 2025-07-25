@@ -1,0 +1,6 @@
+{
+  "recognizer": "mediapipe",
+  "device": "cpu",
+  "camera_id": 0,
+  "sensitivity": 1.5
+}
