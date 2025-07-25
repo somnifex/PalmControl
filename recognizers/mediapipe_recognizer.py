@@ -24,8 +24,22 @@ class MediapipeRecognizer:
         self.process_interval = 1.0 / 60  # 最大60fps处理
         self.frame_skip_count = 0
         self.max_frame_skip = 2  # 最多跳过2帧
+        
+        # 按住功能相关状态
+        self.is_holding = False
+        self.hold_start_time = 0
+        self.hold_threshold = 1.0  # 按住1秒触发
+        self.last_pinch_state = False
+        
+        # V手势状态
+        self.v_gesture_frames = 0
+        self.v_gesture_threshold = 3  # 连续3帧检测到V手势才触发
 
     def process_frame(self, frame):
+        # 检查识别器是否已关闭
+        if self.hands is None:
+            return frame
+            
         current_time = time.time()
         
         # 帧率控制 - 避免过度处理
@@ -59,36 +73,131 @@ class MediapipeRecognizer:
         # 1. Mouse Movement (using index finger tip)
         self.input_controller.move_mouse(index_tip.x, index_tip.y)
 
-        # 2. Click Gesture (thumb and index finger pinch)
+        # 2. 检测捏合手势（拇指和食指靠近）
         pinch_distance = self._calculate_distance(index_tip, thumb_tip)
+        is_pinching = pinch_distance < 0.05  # 捏合阈值
         
         current_time = time.time()
+        
+        # 3. 处理按住功能
+        self._handle_hold_gesture(is_pinching, current_time)
+        
+        # 4. 处理右键V手势
         if current_time - self.last_gesture_time > self.gesture_cooldown:
-            if pinch_distance < 0.05: # Threshold for pinch
-                self.input_controller.left_click()
-                self.last_gesture_time = current_time
-            # 3. Right Click Gesture (V sign - check if middle finger is also up)
-            elif self._is_v_sign(landmarks):
-                self.input_controller.right_click()
-                self.last_gesture_time = current_time
+            if self._is_v_sign(landmarks):
+                self.v_gesture_frames += 1
+                if self.v_gesture_frames >= self.v_gesture_threshold:
+                    self.input_controller.right_click()
+                    self.last_gesture_time = current_time
+                    self.v_gesture_frames = 0
+            else:
+                self.v_gesture_frames = 0
+
+    def _handle_hold_gesture(self, is_pinching, current_time):
+        """处理按住手势逻辑"""
+        if is_pinching and not self.last_pinch_state:
+            # 开始捏合
+            self.hold_start_time = current_time
+            self.last_pinch_state = True
+            
+        elif is_pinching and self.last_pinch_state:
+            # 持续捏合
+            hold_duration = current_time - self.hold_start_time
+            
+            if not self.is_holding and hold_duration >= self.hold_threshold:
+                # 开始按住
+                self.is_holding = True
+                self.input_controller.mouse_down('left')
+                print("开始按住")
+                
+        elif not is_pinching and self.last_pinch_state:
+            # 结束捏合
+            self.last_pinch_state = False
+            
+            if self.is_holding:
+                # 结束按住
+                self.is_holding = False
+                self.input_controller.mouse_up('left')
+                print("结束按住")
+            else:
+                # 短时间捏合，执行点击
+                hold_duration = current_time - self.hold_start_time
+                if hold_duration < self.hold_threshold and current_time - self.last_gesture_time > self.gesture_cooldown:
+                    self.input_controller.left_click()
+                    self.last_gesture_time = current_time
+                    print("执行点击")
 
     def _is_v_sign(self, landmarks):
+        """检测V手势（食指和中指伸直，其他手指弯曲）"""
+        # 获取关键点
         index_tip = landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
+        index_pip = landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_PIP]
+        index_mcp = landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_MCP]
+        
         middle_tip = landmarks.landmark[self.mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+        middle_pip = landmarks.landmark[self.mp_hands.HandLandmark.MIDDLE_FINGER_PIP]
+        middle_mcp = landmarks.landmark[self.mp_hands.HandLandmark.MIDDLE_FINGER_MCP]
+        
         ring_tip = landmarks.landmark[self.mp_hands.HandLandmark.RING_FINGER_TIP]
+        ring_pip = landmarks.landmark[self.mp_hands.HandLandmark.RING_FINGER_PIP]
+        
         pinky_tip = landmarks.landmark[self.mp_hands.HandLandmark.PINKY_TIP]
+        pinky_pip = landmarks.landmark[self.mp_hands.HandLandmark.PINKY_PIP]
+        
+        thumb_tip = landmarks.landmark[self.mp_hands.HandLandmark.THUMB_TIP]
+        thumb_ip = landmarks.landmark[self.mp_hands.HandLandmark.THUMB_IP]
+        
         wrist = landmarks.landmark[self.mp_hands.HandLandmark.WRIST]
 
-        # Check if index and middle fingers are up, and others are down
-        if index_tip.y < wrist.y and middle_tip.y < wrist.y and ring_tip.y > wrist.y and pinky_tip.y > wrist.y:
-            return True
-        return False
+        # 检查食指是否伸直（tip比pip高，pip比mcp高）
+        index_extended = (index_tip.y < index_pip.y < index_mcp.y)
+        
+        # 检查中指是否伸直
+        middle_extended = (middle_tip.y < middle_pip.y < middle_mcp.y)
+        
+        # 检查无名指是否弯曲（tip比pip低）
+        ring_bent = (ring_tip.y > ring_pip.y)
+        
+        # 检查小指是否弯曲
+        pinky_bent = (pinky_tip.y > pinky_pip.y)
+        
+        # 检查拇指是否不伸直（避免与食指形成捏合姿势）
+        thumb_not_extended = (thumb_tip.y > thumb_ip.y)
+        
+        # 检查食指和中指之间的距离，确保它们分开
+        finger_distance = self._calculate_distance(index_tip, middle_tip)
+        fingers_separated = finger_distance > 0.03  # 手指之间有一定距离
+        
+        # V手势：食指和中指伸直，其他手指弯曲，手指分开
+        is_v = (index_extended and middle_extended and 
+               ring_bent and pinky_bent and 
+               thumb_not_extended and fingers_separated)
+        
+        return is_v
 
     def _calculate_distance(self, point1, point2):
         return ((point1.x - point2.x)**2 + (point1.y - point2.y)**2)**0.5
 
+    def set_hold_threshold(self, threshold: float):
+        """设置按住阈值（秒）"""
+        self.hold_threshold = max(0.5, min(3.0, threshold))
+        print(f"Hold threshold set to {self.hold_threshold:.1f} seconds")
+
     def close(self):
-        self.hands.close()
+        # 清理按住状态
+        if self.is_holding:
+            self.input_controller.mouse_up('left')
+            self.is_holding = False
+            print("关闭时释放按住状态")
+        
+        # 安全关闭 MediaPipe hands
+        if hasattr(self, 'hands') and self.hands is not None:
+            try:
+                self.hands.close()
+            except Exception as e:
+                print(f"Warning: Error closing MediaPipe hands: {e}")
+            finally:
+                self.hands = None
 
     def get_performance_stats(self):
         """返回性能统计信息"""

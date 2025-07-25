@@ -73,14 +73,26 @@ class PalmControlApp:
         max_fps = int(self.config_manager.get("max_fps") or 120)
         self.input_controller.set_smoothing_factor(smoothing_factor)
         self.input_controller.set_max_fps(max_fps)
+        
+        # 设置点击稳定性参数
+        click_stability_zone = float(self.config_manager.get("click_stability_zone") or 0.02)
+        self.input_controller.set_click_stability_zone(click_stability_zone)
 
         if self.recognizer:
-            self.recognizer.close()
+            try:
+                self.recognizer.close()
+            except Exception as e:
+                print(f"Warning: Error closing recognizer: {e}")
+            finally:
+                self.recognizer = None
 
         if recognizer_name == "gpu":
             self.recognizer = GpuRecognizer(self.input_controller, device=device or "cpu")
         else:
             self.recognizer = MediapipeRecognizer(self.input_controller)
+            # 设置按住阈值
+            hold_threshold = float(self.config_manager.get("hold_threshold") or 1.0)
+            self.recognizer.set_hold_threshold(hold_threshold)
         print(f"INFO: Switched to {recognizer_name} recognizer.")
 
     def camera_loop(self):
@@ -88,7 +100,8 @@ class PalmControlApp:
         cap = cv2.VideoCapture(camera_id)
         if not cap.isOpened():
             print("Error: Cannot open camera.")
-            self.gui.status_label.configure(text="Error: Camera not found.")
+            if hasattr(self, 'gui') and self.gui is not None:
+                self.gui.status_label.configure(text="Error: Camera not found.")
             return
 
         while not self.stop_event.is_set():
@@ -132,8 +145,12 @@ class PalmControlApp:
         self.stop_event.clear()
         self.camera_thread = threading.Thread(target=self.camera_loop, daemon=True)
         self.camera_thread.start()
-        self.gui.status_label.configure(text="Status: Running", text_color="#2ECC71")
-        self.gui.toggle_button.configure(text="Stop Control")
+        
+        # 只有在GUI存在时才更新GUI状态
+        if hasattr(self, 'gui') and self.gui is not None:
+            self.gui.status_label.configure(text="Status: Running", text_color="#2ECC71")
+            self.gui.toggle_button.configure(text="Stop Control")
+        
         print("INFO: Control started.")
 
     def stop_control_sequence(self):
@@ -141,9 +158,18 @@ class PalmControlApp:
         if self.camera_thread:
             self.camera_thread.join(timeout=1)
         if self.recognizer:
-            self.recognizer.close()
-        self.gui.status_label.configure(text="Status: Stopped", text_color="#E74C3C")
-        self.gui.toggle_button.configure(text="Start Control")
+            try:
+                self.recognizer.close()
+            except Exception as e:
+                print(f"Warning: Error closing recognizer during stop: {e}")
+            finally:
+                self.recognizer = None
+        
+        # 只有在GUI存在时才更新GUI状态
+        if hasattr(self, 'gui') and self.gui is not None:
+            self.gui.status_label.configure(text="Status: Stopped", text_color="#E74C3C")
+            self.gui.toggle_button.configure(text="Start Control")
+        
         print("INFO: Control stopped.")
 
     def toggle_camera_view(self):
@@ -167,8 +193,16 @@ class PalmControlApp:
     def set_recognizer(self, choice):
         self.config_manager.set("recognizer", choice)
         if self.is_control_active: # Reload if running
-            self.stop_control_sequence()
-            self.start_control_sequence()
+            try:
+                self.stop_control_sequence()
+                self.start_control_sequence()
+            except Exception as e:
+                print(f"Error switching recognizer: {e}")
+                # 确保状态一致
+                self.is_control_active = False
+                if hasattr(self, 'gui') and self.gui:
+                    self.gui.status_label.configure(text="Status: Error", text_color="#E74C3C")
+                    self.gui.toggle_button.configure(text="Start Control")
 
     def set_camera(self, cam_id):
         self.config_manager.set("camera_id", cam_id)
@@ -198,10 +232,21 @@ class PalmControlApp:
 
     def exit_app(self):
         print("INFO: Exiting application...")
-        self.stop_control_sequence()
-        if self.tray_icon:
-            self.tray_icon.stop()
-        self.gui.quit()
+        try:
+            self.stop_control_sequence()
+        except Exception as e:
+            print(f"Warning: Error during stop sequence: {e}")
+        
+        try:
+            if self.tray_icon:
+                self.tray_icon.stop()
+        except Exception as e:
+            print(f"Warning: Error stopping tray icon: {e}")
+        
+        try:
+            self.gui.quit()
+        except Exception as e:
+            print(f"Warning: Error quitting GUI: {e}")
 
 if __name__ == "__main__":
     # A simple check for an icon file

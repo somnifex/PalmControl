@@ -202,6 +202,26 @@ class AppGUI(ctk.CTk):
         self.fps_label = ctk.CTkLabel(fps_frame, text="120")
         self.fps_label.grid(row=0, column=2, padx=10)
 
+        # Hold Threshold
+        hold_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        hold_frame.grid(row=4, column=0, columnspan=2, padx=20, pady=15, sticky="ew")
+        hold_frame.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(hold_frame, text="Hold Threshold (seconds):").grid(row=0, column=0, sticky="w")
+        self.hold_slider = ctk.CTkSlider(hold_frame, from_=50, to=300, command=self.on_hold_change)
+        self.hold_slider.grid(row=0, column=1, padx=(10, 0), sticky="ew")
+        self.hold_label = ctk.CTkLabel(hold_frame, text="1.0")
+        self.hold_label.grid(row=0, column=2, padx=10)
+
+        # Click Stability
+        stability_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        stability_frame.grid(row=5, column=0, columnspan=2, padx=20, pady=15, sticky="ew")
+        stability_frame.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(stability_frame, text="Click Stability Zone:").grid(row=0, column=0, sticky="w")
+        self.stability_slider = ctk.CTkSlider(stability_frame, from_=10, to=50, command=self.on_stability_change)
+        self.stability_slider.grid(row=0, column=1, padx=(10, 0), sticky="ew")
+        self.stability_label = ctk.CTkLabel(stability_frame, text="0.02")
+        self.stability_label.grid(row=0, column=2, padx=10)
+
     def load_settings(self):
         self.autostart_switch.select() if self.config_manager.get("autostart") else self.autostart_switch.deselect()
         self.silent_start_switch.select() if self.config_manager.get("start_silently") else self.silent_start_switch.deselect()
@@ -223,6 +243,20 @@ class AppGUI(ctk.CTk):
         max_fps = int(self.config_manager.get("max_fps") or 120)
         self.fps_slider.set(max_fps)
         self.fps_label.configure(text=str(max_fps))
+        
+        # 加载按住阈值设置
+        hold_threshold = float(self.config_manager.get("hold_threshold") or 1.0)
+        # 将0.5-3.0秒转换为50-300的值
+        hold_value = (hold_threshold - 0.5) / 2.5 * 250 + 50
+        self.hold_slider.set(hold_value)
+        self.hold_label.configure(text=f"{hold_threshold:.1f}")
+
+        # 加载点击稳定性设置
+        stability_zone = float(self.config_manager.get("click_stability_zone") or 0.02)
+        # 将0.01-0.05转换为10-50的值
+        stability_value = (stability_zone - 0.01) / 0.04 * 40 + 10
+        self.stability_slider.set(stability_value)
+        self.stability_label.configure(text=f"{stability_zone:.3f}")
 
     def on_autostart_toggle(self):
         is_enabled = self.autostart_switch.get() == 1
@@ -256,3 +290,19 @@ class AppGUI(ctk.CTk):
         self.config_manager.set("max_fps", fps)
         if self.app_logic.input_controller:
             self.app_logic.input_controller.set_max_fps(fps)
+
+    def on_hold_change(self, value):
+        # 将50-300的值转换为0.5-3.0秒
+        hold_threshold = 0.5 + (float(value) - 50) / 250 * 2.5
+        self.hold_label.configure(text=f"{hold_threshold:.1f}")
+        self.config_manager.set("hold_threshold", hold_threshold)
+        if self.app_logic.recognizer and hasattr(self.app_logic.recognizer, 'set_hold_threshold'):
+            self.app_logic.recognizer.set_hold_threshold(hold_threshold)
+
+    def on_stability_change(self, value):
+        # 将10-50的值转换为0.01-0.05
+        stability_zone = 0.01 + (float(value) - 10) / 40 * 0.04
+        self.stability_label.configure(text=f"{stability_zone:.3f}")
+        self.config_manager.set("click_stability_zone", stability_zone)
+        if self.app_logic.input_controller:
+            self.app_logic.input_controller.set_click_stability_zone(stability_zone)

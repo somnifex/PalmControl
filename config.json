@@ -6,5 +6,7 @@
     "autostart": false,
     "start_silently": true,
     "smoothing_factor": 0.37403846153846154,
-    "max_fps": 120
+    "max_fps": 120,
+    "hold_threshold": 1.0,
+    "click_stability_zone": 0.02
 }
