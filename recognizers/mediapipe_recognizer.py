@@ -1,10 +1,12 @@
 import cv2
 import mediapipe as mp
 import time
+import queue
 
 class MediapipeRecognizer:
-    def __init__(self, input_controller):
+    def __init__(self, input_controller, frame_queue=None):
         self.input_controller = input_controller
+        # Remove frame_queue parameter as we'll handle it in main.py
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands(
             min_detection_confidence=0.7,

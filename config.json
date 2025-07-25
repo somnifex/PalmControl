@@ -1,6 +1,8 @@
 {
-  "recognizer": "mediapipe",
-  "device": "cpu",
-  "camera_id": 0,
-  "sensitivity": 1.5
+    "recognizer": "mediapipe",
+    "device": "cpu",
+    "camera_id": 0,
+    "sensitivity": 1.5,
+    "autostart": false,
+    "start_silently": true
 }

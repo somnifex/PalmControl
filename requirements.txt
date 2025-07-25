@@ -3,5 +3,6 @@ mediapipe
 pyautogui
 customtkinter
 pystray
+Pillow>=9.0.0
 # For Windows autostart
 pywin32; sys_platform == 'win32'

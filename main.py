@@ -1,7 +1,9 @@
 import cv2
+import os
 import sys
 import threading
-from PIL import Image
+import queue
+from PIL import Image, UnidentifiedImageError
 from pystray import Icon as TrayIcon, Menu, MenuItem
 
 from config_manager import ConfigManager
@@ -26,11 +28,14 @@ class PalmControlApp:
         self.stop_event = threading.Event()
 
     def run(self):
-        # Create GUI
+        # Create GUI first, as it initializes tkinter
         self.gui = AppGUI(self)
 
-        # Create and run tray icon in a separate thread
-        tray_thread = threading.Thread(target=self.setup_tray_icon, daemon=True)
+        # Setup tray icon (but don't run it yet)
+        self.setup_tray_icon()
+        
+        # Start tray icon in a separate thread
+        tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
         tray_thread.start()
 
         # Handle silent start
@@ -42,7 +47,13 @@ class PalmControlApp:
         self.gui.mainloop()
 
     def setup_tray_icon(self):
-        image = Image.open("icon.png") # Make sure you have an icon.png file
+        try:
+            image = Image.open("icon.png")
+        except UnidentifiedImageError:
+            print("Warning: icon.png is corrupted or not a valid image. Recreating.")
+            os.remove("icon.png")
+            image = Image.new('RGB', (32, 32), color = 'blue')
+            image.save('icon.png')
         menu = Menu(
             MenuItem('Start Control', self.toggle_control_from_tray, checked=lambda item: self.is_control_active),
             MenuItem('Show Settings', self.show_window),
@@ -50,7 +61,6 @@ class PalmControlApp:
             MenuItem('Exit', self.exit_app)
         )
         self.tray_icon = TrayIcon("PalmControl", image, "PalmControl", menu)
-        self.tray_icon.run()
 
     def load_recognizer(self):
         recognizer_name = self.config_manager.get("recognizer")
@@ -76,19 +86,25 @@ class PalmControlApp:
         while not self.stop_event.is_set():
             ret, frame = cap.read()
             if not ret:
-                break
+                print("Warning: Could not read frame from camera. Skipping.")
+                continue
+            
+            # Make a copy of the original frame for video display
+            display_frame = frame.copy()
             
             if self.is_control_active:
-                frame = self.recognizer.process_frame(frame)
+                # Process frame for gesture recognition but don't modify display_frame
+                self.recognizer.process_frame(frame)
 
             if self.is_camera_view_visible:
-                cv2.imshow('PalmControl View', frame)
+                try:
+                    # Only put the original frame in the queue for display
+                    self.gui.frame_queue.put_nowait(display_frame)
+                except queue.Full:
+                    # If the queue is full, just skip this frame
+                    pass
             
-            if cv2.waitKey(1) & 0xFF == ord('q'): # Allow closing view with 'q'
-                self.toggle_camera_view()
-
         cap.release()
-        cv2.destroyAllWindows()
         print("INFO: Camera thread stopped.")
 
     # --- Control Methods ---
@@ -124,8 +140,7 @@ class PalmControlApp:
 
     def toggle_camera_view(self):
         self.is_camera_view_visible = not self.is_camera_view_visible
-        if not self.is_camera_view_visible:
-            cv2.destroyAllWindows()
+        self.gui.toggle_video_visibility(self.is_camera_view_visible)
 
     # --- Settings Methods ---
     def set_autostart(self, enable):

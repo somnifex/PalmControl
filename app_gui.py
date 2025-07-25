@@ -1,26 +1,42 @@
 import customtkinter as ctk
+import tkinter as tk
+from tkinter import PhotoImage
 import cv2
+import numpy as np
+from PIL import Image, ImageTk
+import queue
+import io
+import base64
 
 class AppGUI(ctk.CTk):
     def __init__(self, app_logic):
         super().__init__()
         self.app_logic = app_logic
         self.config_manager = app_logic.config_manager
+        self.frame_queue = queue.Queue(maxsize=2) # Queue to hold video frames
+        self.current_photo = None  # Store reference to current photo
 
         self.title("PalmControl Settings")
-        self.geometry("500x450")
+        self.geometry("600x700") # Increased size for video
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
         self.create_widgets()
         self.load_settings()
+        self.update_video_feed() # Start the video update loop
 
     def create_widgets(self):
         self.grid_columnconfigure(0, weight=1)
-        
+        self.grid_rowconfigure(0, weight=1) # Allow video label to expand
+
+        # --- Video Display ---
+        self.video_label = tk.Label(self, text="Camera feed will appear here when active.", bg="#2b2b2b", fg="#ffffff")
+        self.video_label.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        self.video_label.grid_remove() # Hide it initially
+
         # --- Main Control Frame ---
         control_frame = ctk.CTkFrame(self)
-        control_frame.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
+        control_frame.grid(row=1, column=0, padx=20, pady=(10, 20), sticky="ew")
         control_frame.grid_columnconfigure((0, 1), weight=1)
 
         self.status_label = ctk.CTkLabel(control_frame, text="Status: Stopped", font=ctk.CTkFont(size=14, weight="bold"))
@@ -34,12 +50,102 @@ class AppGUI(ctk.CTk):
 
         # --- Settings Tabs ---
         self.tab_view = ctk.CTkTabview(self)
-        self.tab_view.grid(row=1, column=0, padx=20, pady=(0, 20), sticky="nsew")
+        self.tab_view.grid(row=2, column=0, padx=20, pady=(0, 20), sticky="ew")
         self.tab_view.add("General")
         self.tab_view.add("Advanced")
 
         self.create_general_tab(self.tab_view.tab("General"))
         self.create_advanced_tab(self.tab_view.tab("Advanced"))
+
+    def update_video_feed(self):
+        try:
+            # Try to get the latest frame from the queue
+            latest_frame = None
+            while True:
+                try:
+                    latest_frame = self.frame_queue.get_nowait()
+                except queue.Empty:
+                    break
+            
+            # Display the latest frame if available
+            if latest_frame is not None:
+                # Validate frame data type and shape
+                if not isinstance(latest_frame, np.ndarray):
+                    print(f"Warning: Expected numpy array, got {type(latest_frame)}")
+                    return
+                
+                if len(latest_frame.shape) != 3 or latest_frame.shape[2] != 3:
+                    print(f"Warning: Expected 3-channel image, got shape {latest_frame.shape}")
+                    return
+                
+                # Check if frame data is valid
+                if latest_frame.size == 0:
+                    print("Warning: Empty frame received")
+                    return
+                
+                # Ensure the frame is in the correct data type (uint8)
+                if latest_frame.dtype != np.uint8:
+                    latest_frame = latest_frame.astype(np.uint8)
+                
+                try:
+                    # Convert OpenCV frame (BGR) to RGB
+                    rgb_frame = cv2.cvtColor(latest_frame, cv2.COLOR_BGR2RGB)
+                except cv2.error as e:
+                    print(f"Warning: OpenCV color conversion failed: {e}")
+                    return
+                except Exception as e:
+                    print(f"Warning: Unexpected error in color conversion: {e}")
+                    return
+                
+                # Resize frame to fit in the video display area
+                height, width = rgb_frame.shape[:2]
+                max_width, max_height = 560, 300  # Adjust these values as needed
+                
+                # Calculate scaling factor to maintain aspect ratio
+                scale = min(max_width / width, max_height / height)
+                new_width = int(width * scale)
+                new_height = int(height * scale)
+                
+                try:
+                    # Resize the frame
+                    resized_frame = cv2.resize(rgb_frame, (new_width, new_height))
+                    
+                    # Convert to PIL Image
+                    pil_image = Image.fromarray(resized_frame)
+                    
+                    # Convert PIL image to bytes and then to base64
+                    import io
+                    img_buffer = io.BytesIO()
+                    pil_image.save(img_buffer, format='PNG')
+                    img_base64 = base64.b64encode(img_buffer.getvalue()).decode()
+                    
+                    # Create PhotoImage from base64 data
+                    photo = tk.PhotoImage(data=img_base64)
+                    
+                    # Update the video label and store reference
+                    self.video_label.config(image=photo, text="")
+                    self.current_photo = photo  # Keep reference to prevent garbage collection
+                    
+                except Exception as e:
+                    print(f"Warning: Image processing failed: {e}")
+                    return
+                
+        except Exception as e:
+            print(f"Warning: Error in video feed update: {e}")
+            self.video_label.config(image='', text="Video processing active")
+        finally:
+            self.after(100, self.update_video_feed) # Schedule next update
+
+    def toggle_video_visibility(self, show):
+        if show:
+            self.video_label.grid()
+            self.show_camera_button.configure(text="Hide Camera")
+        else:
+            self.video_label.grid_remove()
+            self.show_camera_button.configure(text="Show Camera")
+            # Clear the label when hidden
+            self.video_label.configure(image='', text="Camera feed hidden.")
+            self.current_photo = None  # Clear photo reference
 
     def create_general_tab(self, tab):
         tab.grid_columnconfigure(0, weight=1)
@@ -57,7 +163,7 @@ class AppGUI(ctk.CTk):
         sensitivity_frame.grid(row=2, column=0, padx=20, pady=15, sticky="ew")
         sensitivity_frame.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(sensitivity_frame, text="Mouse Sensitivity:").grid(row=0, column=0, sticky="w")
-        self.sensitivity_slider = ctk.CTkSlider(sensitivity_frame, from_=0.5, to=3.0, command=self.on_sensitivity_change)
+        self.sensitivity_slider = ctk.CTkSlider(sensitivity_frame, from_=1, to=4, command=self.on_sensitivity_change)
         self.sensitivity_slider.grid(row=0, column=1, padx=(10, 0), sticky="ew")
         self.sensitivity_label = ctk.CTkLabel(sensitivity_frame, text="1.5")
         self.sensitivity_label.grid(row=0, column=2, padx=10)

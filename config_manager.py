@@ -8,7 +8,7 @@ class ConfigManager:
             "recognizer": "mediapipe",
             "device": "cpu",
             "camera_id": 0,
-            "sensitivity": 1.5,
+            "sensitivity": 2.0,
             "autostart": False,
             "start_silently": True
         }
