@@ -1,5 +1,7 @@
 # PalmControl
 
+[阅读中文版说明](README_zh-CN.md)
+
 ## Overview
 
 PalmControl is a desktop application for hands-free computer operation, driven by a webcam. It captures and interprets hand gestures and facial movements in real-time, translating them into native mouse and keyboard events. This provides an alternative, intuitive input modality for interacting with the host operating system and its applications.
