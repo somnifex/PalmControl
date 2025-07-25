@@ -4,9 +4,13 @@
     "camera_id": 0,
     "sensitivity": 1.5,
     "autostart": false,
-    "start_silently": true,
+    "start_silently": false,
     "smoothing_factor": 0.37403846153846154,
     "max_fps": 120,
+    "quick_scroll_enabled": true,
+    "quick_scroll_up_sensitivity": 1.0164670658682635,
+    "quick_scroll_down_sensitivity": 0.973186119873817,
+    "quick_scroll_amount": 50,
     "hold_threshold": 1.0,
     "click_stability_zone": 0.02
 }

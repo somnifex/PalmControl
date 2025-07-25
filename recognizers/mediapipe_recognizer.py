@@ -33,6 +33,12 @@ class MediapipeRecognizer:
         # V-gesture state
         self.v_gesture_frames = 0
         self.v_gesture_threshold = 3
+        
+        # Quick scroll gesture state
+        self.last_hand_y = None
+        self.gesture_velocity_threshold = 0.05  # 手势速度阈值
+        self.scroll_gesture_frames = 0
+        self.scroll_gesture_threshold = 2
 
     def process_frame(self, frame):
         if self.hands is None:
@@ -62,6 +68,7 @@ class MediapipeRecognizer:
     def _handle_gestures(self, landmarks):
         index_tip = landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
         thumb_tip = landmarks.landmark[self.mp_hands.HandLandmark.THUMB_TIP]
+        wrist = landmarks.landmark[self.mp_hands.HandLandmark.WRIST]
         
         # Mouse movement
         self.input_controller.move_mouse(index_tip.x, index_tip.y)
@@ -74,6 +81,9 @@ class MediapipeRecognizer:
         
         # Handle hold gesture
         self._handle_hold_gesture(is_pinching, current_time)
+        
+        # Handle quick scroll gestures
+        self._handle_quick_scroll_gesture(wrist, current_time)
         
         # Handle V-gesture for right-click
         if current_time - self.last_gesture_time > self.gesture_cooldown:
@@ -119,6 +129,42 @@ class MediapipeRecognizer:
                     self.input_controller.left_click()
                     self.last_gesture_time = current_time
                     print("执行点击")
+
+    def _handle_quick_scroll_gesture(self, wrist, current_time):
+        """处理快速滚动手势"""
+        current_y = wrist.y
+        
+        # 如果这是第一次检测，保存位置
+        if self.last_hand_y is None:
+            self.last_hand_y = current_y
+            return
+            
+        # 计算垂直移动速度
+        y_velocity = current_y - self.last_hand_y
+        
+        # 检测快速上挥或下挥手势
+        if abs(y_velocity) > self.gesture_velocity_threshold and current_time - self.last_gesture_time > self.gesture_cooldown:
+            self.scroll_gesture_frames += 1
+            
+            if self.scroll_gesture_frames >= self.scroll_gesture_threshold:
+                if y_velocity < -self.gesture_velocity_threshold:
+                    # 快速上挥 - 向上滚动
+                    self.input_controller.scroll("up", is_quick=True)
+                    print("检测到快速上挥手势 - 向上滚动")
+                elif y_velocity > self.gesture_velocity_threshold:
+                    # 快速下挥 - 向下滚动
+                    self.input_controller.scroll("down", is_quick=True)
+                    print("检测到快速下挥手势 - 向下滚动")
+                
+                self.last_gesture_time = current_time
+                self.scroll_gesture_frames = 0
+        else:
+            # 重置计数器如果没有检测到快速手势
+            if abs(y_velocity) <= self.gesture_velocity_threshold:
+                self.scroll_gesture_frames = 0
+        
+        # 更新上一次的位置
+        self.last_hand_y = current_y
 
     def _is_v_sign(self, landmarks):
         """检测V手势（食指和中指伸直，其他手指弯曲）"""

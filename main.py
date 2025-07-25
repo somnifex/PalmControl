@@ -66,7 +66,7 @@ class PalmControlApp:
         recognizer_name = self.config_manager.get("recognizer")
         device = self.config_manager.get("device")
         sensitivity = float(self.config_manager.get("sensitivity") or 2.0)
-        self.input_controller = InputController(sensitivity=sensitivity)
+        self.input_controller = InputController(sensitivity=sensitivity, config_manager=self.config_manager)
         
         # Configure smoothing and FPS
         smoothing_factor = float(self.config_manager.get("smoothing_factor") or 0.3)

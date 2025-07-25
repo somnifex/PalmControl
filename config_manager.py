@@ -12,7 +12,11 @@ class ConfigManager:
             "autostart": False,
             "start_silently": True,
             "smoothing_factor": 0.3,
-            "max_fps": 120
+            "max_fps": 120,
+            "quick_scroll_enabled": True,
+            "quick_scroll_up_sensitivity": 1.5,
+            "quick_scroll_down_sensitivity": 1.5,
+            "quick_scroll_amount": 100
         }
         self.config = self.load_config()
 
@@ -43,3 +47,28 @@ class ConfigManager:
     def set(self, key, value):
         self.config[key] = value
         self.save_config(self.config)
+
+    def get_quick_scroll_settings(self):
+        """获取快速滚动的所有相关设置"""
+        return {
+            "enabled": self.get("quick_scroll_enabled"),
+            "up_sensitivity": self.get("quick_scroll_up_sensitivity"),
+            "down_sensitivity": self.get("quick_scroll_down_sensitivity"),
+            "scroll_amount": self.get("quick_scroll_amount")
+        }
+
+    def set_quick_scroll_settings(self, enabled=None, up_sensitivity=None, 
+                                 down_sensitivity=None, scroll_amount=None):
+        """设置快速滚动的相关参数"""
+        if enabled is not None:
+            self.set("quick_scroll_enabled", enabled)
+        if up_sensitivity is not None:
+            self.set("quick_scroll_up_sensitivity", up_sensitivity)
+        if down_sensitivity is not None:
+            self.set("quick_scroll_down_sensitivity", down_sensitivity)
+        if scroll_amount is not None:
+            self.set("quick_scroll_amount", scroll_amount)
+
+    def is_quick_scroll_enabled(self):
+        """检查快速滚动是否启用"""
+        return self.get("quick_scroll_enabled")

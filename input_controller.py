@@ -4,10 +4,11 @@ import threading
 from collections import deque
 
 class InputController:
-    def __init__(self, sensitivity: float = 2.0):
+    def __init__(self, sensitivity: float = 2.0, config_manager=None):
         self.screen_width, self.screen_height = pyautogui.size()
         self.sensitivity = sensitivity
         self.dead_zone = 0.05
+        self.config_manager = config_manager
         
         # Movement smoothing settings
         self.current_x = self.screen_width // 2
@@ -38,6 +39,17 @@ class InputController:
         self.stable_position_threshold = 0.015
         self.stable_position_frames = 0
         self.min_stable_frames = 3
+        
+        # Quick scroll settings
+        self.quick_scroll_enabled = True
+        self.quick_scroll_up_sensitivity = 1.5
+        self.quick_scroll_down_sensitivity = 1.5
+        self.quick_scroll_amount = 100
+        self.default_scroll_amount = 50
+        
+        # Load quick scroll settings from config if available
+        if self.config_manager:
+            self.load_quick_scroll_settings()
         
         print(f"Screen size: {self.screen_width}x{self.screen_height}")
         
@@ -232,13 +244,75 @@ class InputController:
         self.is_clicking = False
         self.click_lock_position = None
 
-    def scroll(self, direction: str):
-        print(f"Action: Scroll {direction}")
-        scroll_amount = 50  # Adjust as needed
-        if direction == "up":
-            pyautogui.scroll(scroll_amount)
-        elif direction == "down":
-            pyautogui.scroll(-scroll_amount)
+    def scroll(self, direction: str, is_quick: bool = False):
+        """执行滚动操作
+        
+        Args:
+            direction: "up" 或 "down"
+            is_quick: 是否为快速滚动
+        """
+        if is_quick and self.quick_scroll_enabled:
+            # 使用快速滚动设置
+            if direction == "up":
+                scroll_amount = int(self.quick_scroll_amount * self.quick_scroll_up_sensitivity)
+                print(f"Action: Quick Scroll Up (amount: {scroll_amount})")
+                pyautogui.scroll(scroll_amount)
+            elif direction == "down":
+                scroll_amount = int(self.quick_scroll_amount * self.quick_scroll_down_sensitivity)
+                print(f"Action: Quick Scroll Down (amount: {scroll_amount})")
+                pyautogui.scroll(-scroll_amount)
+        else:
+            # 使用默认滚动
+            print(f"Action: Scroll {direction} (amount: {self.default_scroll_amount})")
+            if direction == "up":
+                pyautogui.scroll(self.default_scroll_amount)
+            elif direction == "down":
+                pyautogui.scroll(-self.default_scroll_amount)
+
+    def load_quick_scroll_settings(self):
+        """从配置管理器加载快速滚动设置"""
+        if self.config_manager:
+            settings = self.config_manager.get_quick_scroll_settings()
+            self.quick_scroll_enabled = settings["enabled"]
+            self.quick_scroll_up_sensitivity = settings["up_sensitivity"]
+            self.quick_scroll_down_sensitivity = settings["down_sensitivity"]
+            self.quick_scroll_amount = settings["scroll_amount"]
+            print(f"Loaded quick scroll settings: enabled={self.quick_scroll_enabled}, "
+                  f"up_sens={self.quick_scroll_up_sensitivity}, down_sens={self.quick_scroll_down_sensitivity}, "
+                  f"amount={self.quick_scroll_amount}")
+
+    def update_quick_scroll_settings(self, enabled=None, up_sensitivity=None, 
+                                   down_sensitivity=None, scroll_amount=None):
+        """更新快速滚动设置"""
+        if enabled is not None:
+            self.quick_scroll_enabled = enabled
+        if up_sensitivity is not None:
+            self.quick_scroll_up_sensitivity = up_sensitivity
+        if down_sensitivity is not None:
+            self.quick_scroll_down_sensitivity = down_sensitivity
+        if scroll_amount is not None:
+            self.quick_scroll_amount = scroll_amount
+            
+        # 如果有配置管理器，同时更新配置文件
+        if self.config_manager:
+            self.config_manager.set_quick_scroll_settings(
+                enabled=enabled,
+                up_sensitivity=up_sensitivity,
+                down_sensitivity=down_sensitivity,
+                scroll_amount=scroll_amount
+            )
+        
+        print(f"Updated quick scroll settings: enabled={self.quick_scroll_enabled}")
+
+    def get_quick_scroll_info(self):
+        """获取当前快速滚动设置信息"""
+        return {
+            "enabled": self.quick_scroll_enabled,
+            "up_sensitivity": self.quick_scroll_up_sensitivity,
+            "down_sensitivity": self.quick_scroll_down_sensitivity,
+            "scroll_amount": self.quick_scroll_amount,
+            "default_scroll_amount": self.default_scroll_amount
+        }
 
     def set_smoothing_factor(self, factor: float):
         """设置平滑因子 (0.1-1.0，值越小越平滑)"""

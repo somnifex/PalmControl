@@ -53,9 +53,11 @@ class AppGUI(ctk.CTk):
         self.tab_view.grid(row=2, column=0, padx=20, pady=(0, 20), sticky="ew")
         self.tab_view.add("General")
         self.tab_view.add("Advanced")
+        self.tab_view.add("Scroll")
 
         self.create_general_tab(self.tab_view.tab("General"))
         self.create_advanced_tab(self.tab_view.tab("Advanced"))
+        self.create_scroll_tab(self.tab_view.tab("Scroll"))
 
     def update_video_feed(self):
         try:
@@ -202,6 +204,51 @@ class AppGUI(ctk.CTk):
         self.stability_label = ctk.CTkLabel(stability_frame, text="0.02")
         self.stability_label.grid(row=0, column=2, padx=10)
 
+    def create_scroll_tab(self, tab):
+        tab.grid_columnconfigure(1, weight=1)
+
+        # Quick Scroll Enable
+        quick_scroll_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        quick_scroll_frame.grid(row=0, column=0, columnspan=2, padx=20, pady=15, sticky="ew")
+        ctk.CTkLabel(quick_scroll_frame, text="Enable Quick Scroll:").grid(row=0, column=0, sticky="w")
+        self.quick_scroll_switch = ctk.CTkSwitch(quick_scroll_frame, text="", command=self.on_quick_scroll_toggle)
+        self.quick_scroll_switch.grid(row=0, column=1, padx=20, sticky="e")
+
+        # Quick Scroll Amount
+        amount_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        amount_frame.grid(row=1, column=0, columnspan=2, padx=20, pady=15, sticky="ew")
+        amount_frame.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(amount_frame, text="Quick Scroll Amount:").grid(row=0, column=0, sticky="w")
+        self.scroll_amount_slider = ctk.CTkSlider(amount_frame, from_=50, to=300, command=self.on_scroll_amount_change)
+        self.scroll_amount_slider.grid(row=0, column=1, padx=(10, 0), sticky="ew")
+        self.scroll_amount_label = ctk.CTkLabel(amount_frame, text="100")
+        self.scroll_amount_label.grid(row=0, column=2, padx=10)
+
+        # Quick Scroll Up Sensitivity
+        up_sens_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        up_sens_frame.grid(row=2, column=0, columnspan=2, padx=20, pady=15, sticky="ew")
+        up_sens_frame.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(up_sens_frame, text="Up Scroll Sensitivity:").grid(row=0, column=0, sticky="w")
+        self.up_sensitivity_slider = ctk.CTkSlider(up_sens_frame, from_=50, to=300, command=self.on_up_sensitivity_change)
+        self.up_sensitivity_slider.grid(row=0, column=1, padx=(10, 0), sticky="ew")
+        self.up_sensitivity_label = ctk.CTkLabel(up_sens_frame, text="1.5")
+        self.up_sensitivity_label.grid(row=0, column=2, padx=10)
+
+        # Quick Scroll Down Sensitivity
+        down_sens_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        down_sens_frame.grid(row=3, column=0, columnspan=2, padx=20, pady=15, sticky="ew")
+        down_sens_frame.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(down_sens_frame, text="Down Scroll Sensitivity:").grid(row=0, column=0, sticky="w")
+        self.down_sensitivity_slider = ctk.CTkSlider(down_sens_frame, from_=50, to=300, command=self.on_down_sensitivity_change)
+        self.down_sensitivity_slider.grid(row=0, column=1, padx=(10, 0), sticky="ew")
+        self.down_sensitivity_label = ctk.CTkLabel(down_sens_frame, text="1.5")
+        self.down_sensitivity_label.grid(row=0, column=2, padx=10)
+
+        # Information label
+        info_label = ctk.CTkLabel(tab, text="快速滚动功能允许您调整上挥和下挥手势的滚动响应。\n启用后，手势识别到快速挥动时会使用这些设置。", 
+                                 font=ctk.CTkFont(size=12), text_color="gray60", justify="left", wraplength=500)
+        info_label.grid(row=4, column=0, columnspan=2, padx=20, pady=20, sticky="ew")
+
     def load_settings(self):
         self.autostart_switch.select() if self.config_manager.get("autostart") else self.autostart_switch.deselect()
         self.silent_start_switch.select() if self.config_manager.get("start_silently") else self.silent_start_switch.deselect()
@@ -237,6 +284,29 @@ class AppGUI(ctk.CTk):
         stability_value = (stability_zone - 0.01) / 0.04 * 40 + 10
         self.stability_slider.set(stability_value)
         self.stability_label.configure(text=f"{stability_zone:.3f}")
+
+        # 加载快速滚动设置
+        quick_scroll_enabled = self.config_manager.get("quick_scroll_enabled")
+        if quick_scroll_enabled:
+            self.quick_scroll_switch.select()
+        else:
+            self.quick_scroll_switch.deselect()
+
+        scroll_amount = int(self.config_manager.get("quick_scroll_amount") or 100)
+        self.scroll_amount_slider.set(scroll_amount)
+        self.scroll_amount_label.configure(text=str(scroll_amount))
+
+        up_sensitivity = float(self.config_manager.get("quick_scroll_up_sensitivity") or 1.5)
+        # 将0.5-3.0转换为50-300的值
+        up_sens_value = (up_sensitivity - 0.5) / 2.5 * 250 + 50
+        self.up_sensitivity_slider.set(up_sens_value)
+        self.up_sensitivity_label.configure(text=f"{up_sensitivity:.1f}")
+
+        down_sensitivity = float(self.config_manager.get("quick_scroll_down_sensitivity") or 1.5)
+        # 将0.5-3.0转换为50-300的值
+        down_sens_value = (down_sensitivity - 0.5) / 2.5 * 250 + 50
+        self.down_sensitivity_slider.set(down_sens_value)
+        self.down_sensitivity_label.configure(text=f"{down_sensitivity:.1f}")
 
     def on_autostart_toggle(self):
         is_enabled = self.autostart_switch.get() == 1
@@ -286,3 +356,36 @@ class AppGUI(ctk.CTk):
         self.config_manager.set("click_stability_zone", stability_zone)
         if self.app_logic.input_controller:
             self.app_logic.input_controller.set_click_stability_zone(stability_zone)
+
+    def on_quick_scroll_toggle(self):
+        """快速滚动开关回调"""
+        is_enabled = self.quick_scroll_switch.get() == 1
+        self.config_manager.set("quick_scroll_enabled", is_enabled)
+        if self.app_logic.input_controller:
+            self.app_logic.input_controller.update_quick_scroll_settings(enabled=is_enabled)
+
+    def on_scroll_amount_change(self, value):
+        """滚动量滑块回调"""
+        scroll_amount = int(float(value))
+        self.scroll_amount_label.configure(text=str(scroll_amount))
+        self.config_manager.set("quick_scroll_amount", scroll_amount)
+        if self.app_logic.input_controller:
+            self.app_logic.input_controller.update_quick_scroll_settings(scroll_amount=scroll_amount)
+
+    def on_up_sensitivity_change(self, value):
+        """上挥灵敏度滑块回调"""
+        # 将50-300的值转换为0.5-3.0
+        sensitivity = 0.5 + (float(value) - 50) / 250 * 2.5
+        self.up_sensitivity_label.configure(text=f"{sensitivity:.1f}")
+        self.config_manager.set("quick_scroll_up_sensitivity", sensitivity)
+        if self.app_logic.input_controller:
+            self.app_logic.input_controller.update_quick_scroll_settings(up_sensitivity=sensitivity)
+
+    def on_down_sensitivity_change(self, value):
+        """下挥灵敏度滑块回调"""
+        # 将50-300的值转换为0.5-3.0
+        sensitivity = 0.5 + (float(value) - 50) / 250 * 2.5
+        self.down_sensitivity_label.configure(text=f"{sensitivity:.1f}")
+        self.config_manager.set("quick_scroll_down_sensitivity", sensitivity)
+        if self.app_logic.input_controller:
+            self.app_logic.input_controller.update_quick_scroll_settings(down_sensitivity=sensitivity)
