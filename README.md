@@ -4,7 +4,7 @@
 
 ## Overview
 
-PalmControl is a desktop application for hands-free computer operation, driven by a webcam. It captures and interprets hand gestures and facial movements in real-time, translating them into native mouse and keyboard events. This provides an alternative, intuitive input modality for interacting with the host operating system and its applications.
+PalmControl is a desktop application designed to enable mouse-free computer operation using a camera. It is capable of capturing and interpreting hand gestures and facial movements in real-time, converting them into local mouse events. This provides users with a novel and intuitive way to interact with their computers.
 
 The application is built with a modular and extensible architecture, prioritizing performance and user experience. It features a switchable backend for computer vision tasks, allowing users to balance between processing speed and recognition accuracy by choosing a CPU-bound or a GPU-accelerated engine.
 
