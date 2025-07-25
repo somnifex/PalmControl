@@ -10,7 +10,9 @@ class ConfigManager:
             "camera_id": 0,
             "sensitivity": 2.0,
             "autostart": False,
-            "start_silently": True
+            "start_silently": True,
+            "smoothing_factor": 0.3,
+            "max_fps": 120
         }
         self.config = self.load_config()
 

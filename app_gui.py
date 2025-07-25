@@ -182,6 +182,26 @@ class AppGUI(ctk.CTk):
         self.camera_menu = ctk.CTkOptionMenu(tab, values=["0", "1", "2"], command=self.on_camera_change)
         self.camera_menu.grid(row=1, column=1, padx=20, pady=15, sticky="ew")
 
+        # Movement Smoothing
+        smoothing_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        smoothing_frame.grid(row=2, column=0, columnspan=2, padx=20, pady=15, sticky="ew")
+        smoothing_frame.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(smoothing_frame, text="Movement Smoothing:").grid(row=0, column=0, sticky="w")
+        self.smoothing_slider = ctk.CTkSlider(smoothing_frame, from_=0, to=100, command=self.on_smoothing_change)
+        self.smoothing_slider.grid(row=0, column=1, padx=(10, 0), sticky="ew")
+        self.smoothing_label = ctk.CTkLabel(smoothing_frame, text="0.3")
+        self.smoothing_label.grid(row=0, column=2, padx=10)
+
+        # Max FPS
+        fps_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        fps_frame.grid(row=3, column=0, columnspan=2, padx=20, pady=15, sticky="ew")
+        fps_frame.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(fps_frame, text="Max Movement FPS:").grid(row=0, column=0, sticky="w")
+        self.fps_slider = ctk.CTkSlider(fps_frame, from_=30, to=240, command=self.on_fps_change)
+        self.fps_slider.grid(row=0, column=1, padx=(10, 0), sticky="ew")
+        self.fps_label = ctk.CTkLabel(fps_frame, text="120")
+        self.fps_label.grid(row=0, column=2, padx=10)
+
     def load_settings(self):
         self.autostart_switch.select() if self.config_manager.get("autostart") else self.autostart_switch.deselect()
         self.silent_start_switch.select() if self.config_manager.get("start_silently") else self.silent_start_switch.deselect()
@@ -192,6 +212,17 @@ class AppGUI(ctk.CTk):
 
         self.recognizer_menu.set(self.config_manager.get("recognizer"))
         self.camera_menu.set(str(self.config_manager.get("camera_id")))
+        
+        # 加载平滑设置
+        smoothing_factor = float(self.config_manager.get("smoothing_factor") or 0.3)
+        # 将0.1-1.0转换为0-100的值
+        smoothing_value = (smoothing_factor - 0.1) / 0.9 * 100
+        self.smoothing_slider.set(smoothing_value)
+        self.smoothing_label.configure(text=f"{smoothing_factor:.2f}")
+        
+        max_fps = int(self.config_manager.get("max_fps") or 120)
+        self.fps_slider.set(max_fps)
+        self.fps_label.configure(text=str(max_fps))
 
     def on_autostart_toggle(self):
         is_enabled = self.autostart_switch.get() == 1
@@ -210,3 +241,18 @@ class AppGUI(ctk.CTk):
 
     def on_camera_change(self, choice):
         self.app_logic.set_camera(int(choice))
+
+    def on_smoothing_change(self, value):
+        # 将0-100的值转换为0.1-1.0
+        smoothing = 0.1 + (float(value) / 100) * 0.9
+        self.smoothing_label.configure(text=f"{smoothing:.2f}")
+        self.config_manager.set("smoothing_factor", smoothing)
+        if self.app_logic.input_controller:
+            self.app_logic.input_controller.set_smoothing_factor(smoothing)
+
+    def on_fps_change(self, value):
+        fps = int(float(value))
+        self.fps_label.configure(text=str(fps))
+        self.config_manager.set("max_fps", fps)
+        if self.app_logic.input_controller:
+            self.app_logic.input_controller.set_max_fps(fps)

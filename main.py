@@ -65,19 +65,27 @@ class PalmControlApp:
     def load_recognizer(self):
         recognizer_name = self.config_manager.get("recognizer")
         device = self.config_manager.get("device")
-        self.input_controller = InputController(sensitivity=self.config_manager.get("sensitivity"))
+        sensitivity = float(self.config_manager.get("sensitivity") or 2.0)
+        self.input_controller = InputController(sensitivity=sensitivity)
+        
+        # 设置平滑参数
+        smoothing_factor = float(self.config_manager.get("smoothing_factor") or 0.3)
+        max_fps = int(self.config_manager.get("max_fps") or 120)
+        self.input_controller.set_smoothing_factor(smoothing_factor)
+        self.input_controller.set_max_fps(max_fps)
 
         if self.recognizer:
             self.recognizer.close()
 
         if recognizer_name == "gpu":
-            self.recognizer = GpuRecognizer(self.input_controller, device=device)
+            self.recognizer = GpuRecognizer(self.input_controller, device=device or "cpu")
         else:
             self.recognizer = MediapipeRecognizer(self.input_controller)
         print(f"INFO: Switched to {recognizer_name} recognizer.")
 
     def camera_loop(self):
-        cap = cv2.VideoCapture(self.config_manager.get("camera_id"))
+        camera_id = int(self.config_manager.get("camera_id") or 0)
+        cap = cv2.VideoCapture(camera_id)
         if not cap.isOpened():
             print("Error: Cannot open camera.")
             self.gui.status_label.configure(text="Error: Camera not found.")
@@ -167,6 +175,18 @@ class PalmControlApp:
         if self.is_control_active: # Restart to use new camera
             self.stop_control_sequence()
             self.start_control_sequence()
+
+    def set_smoothing_factor(self, value):
+        """设置平滑因子"""
+        self.config_manager.set("smoothing_factor", value)
+        if self.input_controller:
+            self.input_controller.set_smoothing_factor(value)
+
+    def set_max_fps(self, value):
+        """设置最大FPS"""
+        self.config_manager.set("max_fps", value)
+        if self.input_controller:
+            self.input_controller.set_max_fps(value)
 
     # --- Window and App Lifecycle ---
     def show_window(self):

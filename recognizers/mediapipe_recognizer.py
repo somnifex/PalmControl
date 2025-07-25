@@ -18,8 +18,25 @@ class MediapipeRecognizer:
         # Gesture state
         self.last_gesture_time = 0
         self.gesture_cooldown = 0.5  # seconds
+        
+        # 帧率控制和性能优化
+        self.last_process_time = 0
+        self.process_interval = 1.0 / 60  # 最大60fps处理
+        self.frame_skip_count = 0
+        self.max_frame_skip = 2  # 最多跳过2帧
 
     def process_frame(self, frame):
+        current_time = time.time()
+        
+        # 帧率控制 - 避免过度处理
+        if current_time - self.last_process_time < self.process_interval:
+            self.frame_skip_count += 1
+            if self.frame_skip_count < self.max_frame_skip:
+                return frame
+        
+        self.frame_skip_count = 0
+        self.last_process_time = current_time
+        
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = self.hands.process(frame_rgb)
 
@@ -72,3 +89,13 @@ class MediapipeRecognizer:
 
     def close(self):
         self.hands.close()
+
+    def get_performance_stats(self):
+        """返回性能统计信息"""
+        if hasattr(self, 'last_process_time'):
+            actual_fps = 1.0 / max(self.process_interval, 0.001)
+            return {
+                "target_fps": int(actual_fps),
+                "frame_skips": getattr(self, 'frame_skip_count', 0)
+            }
+        return {"target_fps": 60, "frame_skips": 0}
