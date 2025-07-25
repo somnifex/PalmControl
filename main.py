@@ -68,13 +68,13 @@ class PalmControlApp:
         sensitivity = float(self.config_manager.get("sensitivity") or 2.0)
         self.input_controller = InputController(sensitivity=sensitivity)
         
-        # 设置平滑参数
+        # Configure smoothing and FPS
         smoothing_factor = float(self.config_manager.get("smoothing_factor") or 0.3)
         max_fps = int(self.config_manager.get("max_fps") or 120)
         self.input_controller.set_smoothing_factor(smoothing_factor)
         self.input_controller.set_max_fps(max_fps)
         
-        # 设置点击稳定性参数
+        # Configure click stability
         click_stability_zone = float(self.config_manager.get("click_stability_zone") or 0.02)
         self.input_controller.set_click_stability_zone(click_stability_zone)
 
@@ -90,10 +90,128 @@ class PalmControlApp:
             self.recognizer = GpuRecognizer(self.input_controller, device=device or "cpu")
         else:
             self.recognizer = MediapipeRecognizer(self.input_controller)
-            # 设置按住阈值
+            # Configure hold threshold
             hold_threshold = float(self.config_manager.get("hold_threshold") or 1.0)
             self.recognizer.set_hold_threshold(hold_threshold)
         print(f"INFO: Switched to {recognizer_name} recognizer.")
+
+    def camera_loop(self):
+        camera_id = int(self.config_manager.get("camera_id") or 0)
+        cap = cv2.VideoCapture(camera_id)
+        if not cap.isOpened():
+            print(f"Error: Could not open camera with ID {camera_id}.")
+            self.update_status("Error: Camera not found")
+            self.is_control_active = False
+            self.update_gui_state()
+            return
+
+        while not self.stop_event.is_set():
+            ret, frame = cap.read()
+            if not ret:
+                print("Warning: Failed to grab frame.")
+                time.sleep(0.1)
+                continue
+
+            try:
+                self.recognizer.process_frame(frame)
+                if self.is_camera_view_visible and self.gui:
+                    # Reduce frame size for performance
+                    small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
+                    if not self.gui.frame_queue.full():
+                        self.gui.frame_queue.put(small_frame)
+            except Exception as e:
+                print(f"Error during frame processing: {e}")
+
+        cap.release()
+        print("Camera loop stopped.")
+
+    def toggle_control(self):
+        self.is_control_active = not self.is_control_active
+        if self.is_control_active:
+            self.start_control()
+        else:
+            self.stop_control()
+        self.update_gui_state()
+
+    def toggle_control_from_tray(self):
+        # This function is called from the tray, which runs in a different thread.
+        # It's safer to schedule the GUI update on the main thread.
+        self.gui.after(0, self.toggle_control)
+
+    def start_control(self):
+        if self.camera_thread and self.camera_thread.is_alive():
+            return
+        
+        self.load_recognizer()
+        self.stop_event.clear()
+        self.camera_thread = threading.Thread(target=self.camera_loop, daemon=True)
+        self.camera_thread.start()
+        self.update_status("Running")
+        print("Control started.")
+
+    def stop_control(self):
+        self.stop_event.set()
+        if self.camera_thread:
+            self.camera_thread.join(timeout=2) # Wait for thread to finish
+        self.camera_thread = None
+        self.update_status("Stopped")
+        print("Control stopped.")
+        # Clear the video feed when stopping
+        if self.gui and self.is_camera_view_visible:
+            self.gui.video_label.config(image='', text="Camera feed stopped.")
+            self.gui.current_photo = None
+
+    def toggle_camera_view(self):
+        self.is_camera_view_visible = not self.is_camera_view_visible
+        if self.gui:
+            self.gui.toggle_video_visibility(self.is_camera_view_visible)
+            if not self.is_camera_view_visible:
+                 # Clear the video feed when hiding
+                self.gui.video_label.config(image='', text="Camera feed hidden.")
+                self.gui.current_photo = None
+
+    def update_status(self, status_text):
+        if self.gui:
+            self.gui.status_label.configure(text=f"Status: {status_text}")
+
+    def update_gui_state(self):
+        if self.gui:
+            if self.is_control_active:
+                self.gui.toggle_button.configure(text="Stop Control")
+            else:
+                self.gui.toggle_button.configure(text="Start Control")
+        # Update tray menu
+        if self.tray_icon:
+            self.tray_icon.update_menu()
+
+    def show_window(self):
+        if self.gui:
+            self.gui.deiconify()
+            self.gui.lift()
+            self.gui.focus_force()
+
+    def on_close_window(self):
+        # Instead of closing, hide the window to the tray
+        self.gui.withdraw()
+
+    def exit_app(self):
+        print("Exiting application...")
+        self.stop_control()
+        if self.tray_icon:
+            self.tray_icon.stop()
+        if self.gui:
+            self.gui.quit()
+            self.gui.destroy()
+        # A more forceful exit might be needed if threads are stuck
+        os._exit(0)
+
+if __name__ == "__main__":
+    # This allows the app to find its files when run from an executable
+    if getattr(sys, 'frozen', False):
+        os.chdir(sys._MEIPASS)
+        
+    app = PalmControlApp()
+    app.run()
 
     def camera_loop(self):
         camera_id = int(self.config_manager.get("camera_id") or 0)

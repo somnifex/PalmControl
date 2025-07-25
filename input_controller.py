@@ -9,36 +9,35 @@ class InputController:
         self.sensitivity = sensitivity
         self.dead_zone = 0.05
         
-        # 平滑移动相关设置
+        # Movement smoothing settings
         self.current_x = self.screen_width // 2
         self.current_y = self.screen_height // 2
         self.target_x = self.current_x
         self.target_y = self.current_y
         
-        # 平滑参数
-        self.smoothing_factor = 0.3  # 0-1，值越小越平滑
-        self.position_history = deque(maxlen=5)  # 保存最近5个位置用于平滑
+        self.smoothing_factor = 0.3  # Lower value for smoother movement (0-1)
+        self.position_history = deque(maxlen=5)
         
-        # 移动插值相关
+        # Movement interpolation
         self.is_moving = False
         self.move_thread = None
         self.stop_moving = threading.Event()
         
-        # 帧率控制
+        # Frame rate control
         self.last_move_time = 0
-        self.min_move_interval = 1.0 / 120  # 最大120fps
+        self.min_move_interval = 1.0 / 120  # Max 120 FPS
         
-        # 点击稳定性相关设置
-        self.click_stability_zone = 0.02  # 点击时的稳定区域，更小的值
-        self.is_clicking = False  # 是否正在执行点击操作
-        self.click_lock_position = None  # 点击时锁定的位置
-        self.click_lock_duration = 0.3  # 点击锁定持续时间（秒）
+        # Click stability settings
+        self.click_stability_zone = 0.02
+        self.is_clicking = False
+        self.click_lock_position = None
+        self.click_lock_duration = 0.3
         self.click_lock_start_time = 0
         
-        # 位置稳定性检测
-        self.stable_position_threshold = 0.015  # 位置稳定性阈值
-        self.stable_position_frames = 0  # 稳定位置的连续帧数
-        self.min_stable_frames = 3  # 最少稳定帧数才允许点击
+        # Position stability detection
+        self.stable_position_threshold = 0.015
+        self.stable_position_frames = 0
+        self.min_stable_frames = 3
         
         print(f"Screen size: {self.screen_width}x{self.screen_height}")
         
@@ -64,7 +63,7 @@ class InputController:
         
         self.last_move_time = current_time
         
-        # Check click lock status
+        # Handle click lock
         if self.is_clicking and self.click_lock_position:
             lock_duration = current_time - self.click_lock_start_time
             if lock_duration < self.click_lock_duration:
@@ -76,7 +75,7 @@ class InputController:
                     self.is_clicking = False
                     self.click_lock_position = None
         
-        # Apply dead zone with improved logic
+        # Apply dead zone
         original_x, original_y = x, y
         if x < self.dead_zone:
             x = self.dead_zone

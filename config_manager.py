@@ -23,11 +23,12 @@ class ConfigManager:
         try:
             with open(self.file_path, 'r') as f:
                 user_config = json.load(f)
-                # Ensure all keys are present
+                # Merge user config with defaults to ensure all keys are present
                 config = self.defaults.copy()
                 config.update(user_config)
                 return config
         except (json.JSONDecodeError, TypeError):
+            # If config is corrupted, reset to defaults
             self.save_config(self.defaults)
             return self.defaults
 

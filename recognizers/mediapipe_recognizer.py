@@ -6,7 +6,6 @@ import queue
 class MediapipeRecognizer:
     def __init__(self, input_controller, frame_queue=None):
         self.input_controller = input_controller
-        # Remove frame_queue parameter as we'll handle it in main.py
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands(
             min_detection_confidence=0.7,
@@ -19,30 +18,29 @@ class MediapipeRecognizer:
         self.last_gesture_time = 0
         self.gesture_cooldown = 0.5  # seconds
         
-        # 帧率控制和性能优化
+        # Performance optimization
         self.last_process_time = 0
-        self.process_interval = 1.0 / 60  # 最大60fps处理
+        self.process_interval = 1.0 / 60  # Max 60 FPS processing
         self.frame_skip_count = 0
-        self.max_frame_skip = 2  # 最多跳过2帧
+        self.max_frame_skip = 2
         
-        # 按住功能相关状态
+        # Hold gesture state
         self.is_holding = False
         self.hold_start_time = 0
-        self.hold_threshold = 1.0  # 按住1秒触发
+        self.hold_threshold = 1.0
         self.last_pinch_state = False
         
-        # V手势状态
+        # V-gesture state
         self.v_gesture_frames = 0
-        self.v_gesture_threshold = 3  # 连续3帧检测到V手势才触发
+        self.v_gesture_threshold = 3
 
     def process_frame(self, frame):
-        # 检查识别器是否已关闭
         if self.hands is None:
             return frame
             
         current_time = time.time()
         
-        # 帧率控制 - 避免过度处理
+        # Frame rate control
         if current_time - self.last_process_time < self.process_interval:
             self.frame_skip_count += 1
             if self.frame_skip_count < self.max_frame_skip:
@@ -57,32 +55,27 @@ class MediapipeRecognizer:
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
                 self.mp_drawing.draw_landmarks(frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS)
-                
-                # --- Gesture Recognition Logic ---
                 self._handle_gestures(hand_landmarks)
 
         return frame
 
     def _handle_gestures(self, landmarks):
-        # Landmark coordinates are normalized to [0.0, 1.0]
         index_tip = landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
         thumb_tip = landmarks.landmark[self.mp_hands.HandLandmark.THUMB_TIP]
-        middle_finger_tip = landmarks.landmark[self.mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
-        wrist = landmarks.landmark[self.mp_hands.HandLandmark.WRIST]
-
-        # 1. Mouse Movement (using index finger tip)
+        
+        # Mouse movement
         self.input_controller.move_mouse(index_tip.x, index_tip.y)
 
-        # 2. 检测捏合手势（拇指和食指靠近）
+        # Pinch gesture detection
         pinch_distance = self._calculate_distance(index_tip, thumb_tip)
-        is_pinching = pinch_distance < 0.05  # 捏合阈值
+        is_pinching = pinch_distance < 0.05
         
         current_time = time.time()
         
-        # 3. 处理按住功能
+        # Handle hold gesture
         self._handle_hold_gesture(is_pinching, current_time)
         
-        # 4. 处理右键V手势
+        # Handle V-gesture for right-click
         if current_time - self.last_gesture_time > self.gesture_cooldown:
             if self._is_v_sign(landmarks):
                 self.v_gesture_frames += 1
@@ -94,9 +87,9 @@ class MediapipeRecognizer:
                 self.v_gesture_frames = 0
 
     def _handle_hold_gesture(self, is_pinching, current_time):
-        """处理按住手势逻辑"""
+        """Handles the logic for hold gestures."""
         if is_pinching and not self.last_pinch_state:
-            # 开始捏合
+            # Pinch started
             self.hold_start_time = current_time
             self.last_pinch_state = True
             

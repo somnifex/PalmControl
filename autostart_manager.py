@@ -5,8 +5,7 @@ class AutostartManager:
     def __init__(self):
         self.platform = sys.platform
         self.app_name = "PalmControl"
-        # Get the absolute path to the main script
-        self.script_path = os.path.abspath("main.py") 
+        self.script_path = os.path.abspath("main.py")
 
     def is_enabled(self):
         if self.platform == "win32":
@@ -32,6 +31,122 @@ class AutostartManager:
             self._disable_macos()
         elif self.platform.startswith("linux"):
             self._disable_linux()
+
+    # --- Windows Specific ---
+    def _is_enabled_windows(self):
+        import winreg
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_READ)
+            winreg.QueryValueEx(key, self.app_name)
+            winreg.CloseKey(key)
+            return True
+        except FileNotFoundError:
+            return False
+
+    def _enable_windows(self):
+        import winreg
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
+            # Create a .bat file to run the python script in the background
+            bat_path = os.path.join(os.path.dirname(self.script_path), f"{self.app_name}.bat")
+            with open(bat_path, "w") as bat_file:
+                bat_file.write(f'start "" "{sys.executable}" "{self.script_path}" --silent')
+            winreg.SetValueEx(key, self.app_name, 0, winreg.REG_SZ, bat_path)
+            winreg.CloseKey(key)
+        except Exception as e:
+            print(f"Error enabling autostart: {e}")
+
+    def _disable_windows(self):
+        import winreg
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
+            winreg.DeleteValue(key, self.app_name)
+            winreg.CloseKey(key)
+            # Remove the associated .bat file
+            bat_path = os.path.join(os.path.dirname(self.script_path), f"{self.app_name}.bat")
+            if os.path.exists(bat_path):
+                os.remove(bat_path)
+        except FileNotFoundError:
+            pass # Key or value doesn't exist, ignore
+        except Exception as e:
+            print(f"Error disabling autostart: {e}")
+
+    # --- macOS Specific ---
+    def _get_plist_path(self):
+        return os.path.expanduser(f"~/Library/LaunchAgents/com.{self.app_name.lower()}.plist")
+
+    def _is_enabled_macos(self):
+        return os.path.exists(self._get_plist_path())
+
+    def _enable_macos(self):
+        plist_path = self._get_plist_path()
+        plist_content = f'''
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>Label</key>
+            <string>com.{self.app_name.lower()}</string>
+            <key>ProgramArguments</key>
+            <array>
+                <string>{sys.executable}</string>
+                <string>{self.script_path}</string>
+                <string>--silent</string>
+            </array>
+            <key>RunAtLoad</key>
+            <true/>
+        </dict>
+        </plist>
+        '''
+        try:
+            with open(plist_path, "w") as f:
+                f.write(plist_content)
+        except Exception as e:
+            print(f"Error enabling autostart: {e}")
+
+    def _disable_macos(self):
+        plist_path = self._get_plist_path()
+        try:
+            if os.path.exists(plist_path):
+                os.remove(plist_path)
+        except Exception as e:
+            print(f"Error disabling autostart: {e}")
+
+    # --- Linux Specific ---
+    def _get_desktop_file_path(self):
+        return os.path.expanduser(f"~/.config/autostart/{self.app_name}.desktop")
+
+    def _is_enabled_linux(self):
+        return os.path.exists(self._get_desktop_file_path())
+
+    def _enable_linux(self):
+        desktop_file_path = self._get_desktop_file_path()
+        os.makedirs(os.path.dirname(desktop_file_path), exist_ok=True)
+        desktop_content = f'''
+[Desktop Entry]
+Type=Application
+Exec={sys.executable} "{self.script_path}" --silent
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Name[en_US]={self.app_name}
+Name={self.app_name}
+Comment[en_US]=Start {self.app_name}
+Comment=Start {self.app_name}
+'''
+        try:
+            with open(desktop_file_path, "w") as f:
+                f.write(desktop_content)
+        except Exception as e:
+            print(f"Error enabling autostart: {e}")
+
+    def _disable_linux(self):
+        desktop_file_path = self._get_desktop_file_path()
+        try:
+            if os.path.exists(desktop_file_path):
+                os.remove(desktop_file_path)
+        except Exception as e:
+            print(f"Error disabling autostart: {e}")
 
     # --- Windows Specific --- (using pywin32)
     def _is_enabled_windows(self):
